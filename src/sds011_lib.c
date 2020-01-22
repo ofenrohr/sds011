@@ -26,6 +26,7 @@
  */
 
 #include "sds011_lib.h"
+#include "http_client.h"
 
 uint8_t SDS011_Packet[SDS011_SENDPACKET_LEN];
 bool    _PendingConfReq = false;    // indicate configuration request pending
@@ -159,7 +160,7 @@ int Wait_For_answer()
             //printf("i=%d\n",i);
 
              // read / parse response from sds
-            read_sds(1,buf);
+            read_sds(1,buf,NULL);
         }
 
         printf("%s", buf);
@@ -345,7 +346,7 @@ int Set_Working_Period(uint8_t period) {
  *  SDS011_ERROR = could not send command
  *  SDS011_OK = all good
  *********************************************************************/
-int Query_data(int loop, int delay)
+int Query_data(int loop, int delay, char *url)
 {
     char buf[40];
     bool save_gdata = _Display_Data;
@@ -363,7 +364,7 @@ int Query_data(int loop, int delay)
         if (send_sds(SDS011_Packet) == SDS011_ERROR) goto q_error;
 
         // read / parse response from sds
-        if (read_sds(1, buf) == SDS011_ERROR) goto q_error;
+        if (read_sds(1, buf, url) == SDS011_ERROR) goto q_error;
 
         printf("%s", buf);
 
@@ -453,7 +454,7 @@ int Try_Connect(int fd)
     while (_PendingConfReq)  // as long as no answer
     {
         usleep(10000);      // wait
-        read_sds(1, NULL);  // check for answer
+        read_sds(1, NULL, NULL);  // check for answer
 
         if(i++ == 2 && _PendingConfReq) {
             i = 0;
@@ -556,13 +557,15 @@ int send_sds(uint8_t * packet) {
  *  SDS011_ERROR = could not handle received message
  *  SDS011_OK = all good
  *********************************************************************/
-int read_sds(int loop, char *ret1) {
+
+int read_sds(int loop, char *ret1, char *url) {
 
     uint8_t buf[20];
     int num = 0;
     int count = loop;
     sds011_response_t data;
     char *ret, l_ret[40];
+	char full_url[3000];
 
     // if endless loop use local buffer for display data
     if (count == 0) {
@@ -588,8 +591,13 @@ int read_sds(int loop, char *ret1) {
 
                     // if not a pending answer on a configuration request
                     // AND expecting data to be displayed
-                    if ( ! _PendingConfReq && _Display_Data)
+                    if ( ! _PendingConfReq && _Display_Data) {
                         sprintf(ret,"PM2.5: %.2f, PM10: %.2f\n", data.pm25, data.pm10);
+					}
+                    if ( ! _PendingConfReq && strlen(url) > 0) {
+						sprintf(full_url, "%s?pm25=%.2f&pm10=%.2f", url, data.pm25, data.pm10);
+						send_http_request(full_url);
+					}
 
                     goto add_dev;
                     break;

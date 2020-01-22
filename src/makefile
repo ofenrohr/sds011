@@ -1,12 +1,13 @@
 # makefile for sds011. Janaury 2019 / paulvha
 
 CC = gcc
-DEPS = sds011_lib.h serial.h
-OBJ = sds.o serial.o sds011_lib.o
-LIBS = -lm
+DEPS = sds011_lib.h serial.h http_client.h
+OBJ = sds.o serial.o sds011_lib.o http_client.o
+LIBS = -lm -lcurl
+CFLAGS = -Wall
 
 .cpp.o: %c $(DEPS)
-	$(CC) -Wall -Werror -c -o $@ $<
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 sds : $(OBJ)
 	$(CC) -o $@ $^ $(LIBS)

@@ -29,8 +29,11 @@
  * THE SOFTWARE.
  */
 
+
 #include "serial.h"
 #include "sds011_lib.h"
+#include <curl/curl.h>
+#include <string.h>
 
 #define PROGVERSION "1.1 / February 2019 / paulvha"
 
@@ -40,6 +43,7 @@ char progname[20];
 char port[20] = "/dev/ttyUSB0";
 bool PrmDebug;                   // enable debug messages
 bool NoColor = false;            // no color output
+char urlarg[2048] = "";
 
 
 // command line options
@@ -77,6 +81,7 @@ void closeout(int val)
         close(fd);
     }
 
+	curl_global_cleanup();
     exit(val);
 }
 
@@ -218,7 +223,11 @@ void usage ()
     "-u device      set new device               (default = %s)\n"
     "-b             set no color output          (default : color)\n"
     "-h             show help info\n"
-    "-v             set verbose / debug info     (default : NOT set\n",
+    "-v             set verbose / debug info     (default : NOT set)\n"
+
+    "\nHTTP client setting: \n\n"
+
+    "-C url         call url with measured data. example: '?pm25=5.80&pm10=30.20'.\n",
      progname,PROGVERSION, port);
 }
 
@@ -284,6 +293,7 @@ void parse_cmdline(int opt, char *option, struct settings *action)
 
              if (i > sizeof(buf)){
                 p_printf(RED,"query read amount too long %s\n", option);
+				curl_global_cleanup();
                 exit(EXIT_FAILURE);
              }
         }
@@ -298,6 +308,7 @@ void parse_cmdline(int opt, char *option, struct settings *action)
 
              if (i > sizeof(buf)){
                 p_printf(RED,"query delay amount too long %s\n", option);
+				curl_global_cleanup();
                 exit(EXIT_FAILURE);
              }
         }
@@ -329,6 +340,7 @@ void parse_cmdline(int opt, char *option, struct settings *action)
             }
         }
         p_printf(RED,"Invalid Device Id %s\n", option);
+		curl_global_cleanup();
         exit(EXIT_FAILURE);
         break;
 
@@ -337,6 +349,7 @@ void parse_cmdline(int opt, char *option, struct settings *action)
         else if (*option == 'w'|| *option == 'W') action->s_working_mode = MODE_WORK;
         else {
             p_printf(RED,"invalid working mode %s [ s or w ]\n", option);
+			curl_global_cleanup();
             exit(EXIT_FAILURE);
         }
         break;
@@ -346,6 +359,7 @@ void parse_cmdline(int opt, char *option, struct settings *action)
 
         if (action->s_working_period  < 0 || action->s_working_period  > 30){
             p_printf(RED,"invalid working period %d minutes. [ 0 - 30 ]\n", action->s_working_period );
+			curl_global_cleanup();
             exit(EXIT_FAILURE);
         }
 
@@ -355,6 +369,7 @@ void parse_cmdline(int opt, char *option, struct settings *action)
         if (Set_Humidity_Cor(strtod(option, NULL)))
         {
             p_printf(RED,"Invalid Humidity : %s [1 - 100%]\n",option );
+			curl_global_cleanup();
             exit(EXIT_FAILURE);
         }
         break;
@@ -364,12 +379,19 @@ void parse_cmdline(int opt, char *option, struct settings *action)
         else if (*option == 'q' || *option == 'Q') action->s_reporting_mode = REPORT_QUERY;
         else {
             p_printf(RED,"invalid reporting mode %s [ r or q ]\n", option);
+			curl_global_cleanup();
             exit(EXIT_FAILURE);
         }
         break;
+	
+	case 'C': // set url for curl
+		strncpy(urlarg, option, sizeof(urlarg));
+		printf("urlarg: %s\n", urlarg);
+		break;
 
     default:    /* '?' */
         usage();
+		curl_global_cleanup();
         exit(EXIT_FAILURE);
     }
 }
@@ -457,14 +479,14 @@ void main_action(struct settings *action)
 
     if (action->q_loop != 0xff){
         /* query data */
-        if (Query_data( action->q_loop,  action->q_delay) == SDS011_ERROR) {
+        if (Query_data( action->q_loop, action->q_delay, urlarg) == SDS011_ERROR) {
             p_printf(RED,"error during query data\n");
             closeout(EXIT_FAILURE);
         }
     }
 
     // last in chain... as it keeps looping
-    if (action->g_data) read_sds(0, NULL);
+    if (action->g_data) read_sds(0, NULL, urlarg);
 }
 
 /*********************************************************************
@@ -477,10 +499,12 @@ int main(int argc, char *argv[])
     /* save name for (potential) usage display */
     strncpy(progname,argv[0],20);
 
+	curl_global_init(CURL_GLOBAL_DEFAULT);
+
     init_variables();
 
     /* parse commandline */
-    while ((opt = getopt(argc, argv, "H:hbmprdfovM:R:P:D:u:q:")) != -1)
+    while ((opt = getopt(argc, argv, "H:hbmprdfovM:R:P:D:u:q:C:")) != -1)
        parse_cmdline(opt, optarg, &action);
 
     /* set signals */
@@ -498,6 +522,7 @@ int main(int argc, char *argv[])
 
     if (fd < 0) {
         p_printf(RED, "could not open %s\n", port);
+		curl_global_cleanup();
         exit(EXIT_FAILURE);
     }
 

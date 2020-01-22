@@ -84,6 +84,7 @@ extern "C" {
 
 extern bool PrmDebug;
 
+
 typedef struct
 {
     uint8_t cmd_id; // Command ID
@@ -124,7 +125,7 @@ int Set_New_Devid(uint8_t * newid);
 int Query_data();
 
 void prepare_packet(uint8_t data1);
-int read_sds(int loop, char * ret);
+int read_sds(int loop, char *ret1, char *url);
 int send_sds(uint8_t * packet);
 void SetDataDisplay(bool instruct);
 int Set_Humidity_Cor(float h);
